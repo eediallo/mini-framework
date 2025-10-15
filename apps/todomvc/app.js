@@ -5,11 +5,7 @@ import { createRouter } from '../../framework/router.js';
 
 // State shape: { todos: [{id, title, completed}], filter: 'all', editingId: null }
 const store = createStore({ 
-  todos: [
-    { id: '1', title: 'Going to the Gym.', completed: false },
-    { id: '2', title: 'Call Mama', completed: true },
-    { id: '3', title: 'Do homework', completed: false }
-  ], 
+  todos: [], 
   filter: 'all', 
   editingId: null 
 });
@@ -41,14 +37,14 @@ function view(state) {
 
     return h('li', { 'data-id': t.id, class: liClass },
       h('div', { class: 'view' },
-        h('input', { class: 'toggle', type: 'checkbox', checked: t.completed ? 'checked' : null }),
+        h('input', { class: 'toggle', type: 'checkbox', checked: t.completed }),
         h('label', { 'data-id': t.id }, t.title),
         h('button', { class: 'destroy' })
       )
     );
   });
 
-  return h('div', {}, items);
+  return h('#fragment', {}, items);
 }
 
 function updateFromRoute(path) {
@@ -212,14 +208,7 @@ function wireEvents() {
       finishEditing(id, el.value);
     },
     'click #clear-completed': () => clearCompleted(),
-    'change #toggle-all': (ev, el) => toggleAll(el.checked),
-    'click label[for="toggle-all"]': (ev, el) => {
-      const toggleAllEl = document.getElementById('toggle-all');
-      if (toggleAllEl) {
-        toggleAllEl.checked = !toggleAllEl.checked;
-        toggleAll(toggleAllEl.checked);
-      }
-    }
+    'change #toggle-all': (ev, el) => toggleAll(el.checked)
   });
   return dispose;
 }
@@ -229,10 +218,38 @@ updateFromRoute(router.getLocation());
 router.onChange(updateFromRoute);
 
 const unsubscribe = store.subscribe(renderApp);
-const disposeEvents = wireEvents();
+let disposeEvents = null;
+
+// Wire up events once
+function initializeApp() {
+  if (disposeEvents) disposeEvents(); // Clean up any existing events
+  disposeEvents = wireEvents();
+  renderApp();
+}
 
 // First render
-window.addEventListener('DOMContentLoaded', renderApp);
+window.addEventListener('DOMContentLoaded', initializeApp);
+
+// Add sample data for testing (can be cleared)
+function addSampleData() {
+  store.update(s => ({
+    ...s,
+    todos: [
+      { id: '1', title: 'Going to the Gym.', completed: false },
+      { id: '2', title: 'Call Mama', completed: true },
+      { id: '3', title: 'Do homework', completed: false }
+    ]
+  }));
+}
 
 // Expose for quick debugging in console
-window.app = { store, addTodo, toggleTodo, destroyTodo, toggleAll, clearCompleted };
+window.app = { 
+  store, 
+  addTodo, 
+  toggleTodo, 
+  destroyTodo, 
+  toggleAll, 
+  clearCompleted,
+  addSampleData,
+  clearAll: () => store.update(s => ({ ...s, todos: [] }))
+};
