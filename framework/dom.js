@@ -13,8 +13,16 @@ function setAttrs(el, attrs) {
   for (const [key, value] of Object.entries(attrs)) {
     if (value === false || value === null || value === undefined) {
       el.removeAttribute(key);
+      // For boolean properties, also set the property to false
+      if (key === 'checked' || key === 'disabled' || key === 'selected') {
+        try { el[key] = false; } catch {}
+      }
     } else if (key === 'value' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.value = value;
+    } else if (key === 'checked' || key === 'disabled' || key === 'selected') {
+      // For boolean properties, set both attribute and property
+      el.setAttribute(key, '');
+      try { el[key] = true; } catch {}
     } else if (key === 'className') {
       el.setAttribute('class', value);
     } else {
@@ -26,6 +34,13 @@ function setAttrs(el, attrs) {
 function createElement(vnode) {
   if (vnode.tag === '#text') {
     return document.createTextNode(vnode.text || '');
+  }
+  if (vnode.tag === '#fragment') {
+    const frag = document.createDocumentFragment();
+    for (const child of vnode.children || []) {
+      frag.appendChild(createElement(child));
+    }
+    return frag;
   }
   const el = document.createElement(vnode.tag);
   if (vnode.attrs) setAttrs(el, vnode.attrs);
@@ -42,6 +57,10 @@ function updateAttrs(el, oldAttrs = {}, newAttrs = {}) {
   for (const key of Object.keys(oldAttrs)) {
     if (!(key in newAttrs)) {
       el.removeAttribute(key);
+      // For boolean properties, also set the property to false
+      if (key === 'checked' || key === 'disabled' || key === 'selected') {
+        try { el[key] = false; } catch {}
+      }
     }
   }
   // Set new attributes
@@ -68,7 +87,7 @@ export function diff(parent, oldNode, newNode, index = 0) {
     if (oldEl) parentEl.removeChild(oldEl);
     return;
   }
-  if (oldNode.tag !== newNode.tag) {
+  if (oldNode.tag !== newNode.tag || newNode.tag === '#fragment') {
     parentEl.replaceChild(createElement(newNode), oldEl);
     return;
   }
@@ -93,7 +112,7 @@ export function diff(parent, oldNode, newNode, index = 0) {
 
 export function render(nextVNode, container, state) {
   const prev = container.__vnode;
-  if (!prev) {
+  if (!prev || prev.tag === '#fragment' || nextVNode.tag === '#fragment') {
     mount(nextVNode, container);
   } else {
     diff(container, prev, nextVNode, 0);
