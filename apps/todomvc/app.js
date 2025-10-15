@@ -3,8 +3,8 @@ import { createStore } from '../../framework/state.js';
 import { bindEvents } from '../../framework/events.js';
 import { createRouter } from '../../framework/router.js';
 
-// State shape: { todos: [{id, title, completed}], filter: 'all' }
-const store = createStore({ todos: [], filter: 'all' });
+// State shape: { todos: [{id, title, completed}], filter: 'all', editingId: null }
+const store = createStore({ todos: [], filter: 'all', editingId: null });
 const router = createRouter();
 
 function filteredTodos(state) {
@@ -14,15 +14,31 @@ function filteredTodos(state) {
 }
 
 function view(state) {
-  const items = filteredTodos(state).map(t =>
-    h('li', { 'data-id': t.id, class: t.completed ? 'completed' : '' },
+  const items = filteredTodos(state).map(t => {
+    const isEditing = state.editingId === t.id;
+    const liClass = [
+      t.completed ? 'completed' : '',
+      isEditing ? 'editing' : ''
+    ].filter(Boolean).join(' ');
+
+    if (isEditing) {
+      return h('li', { 'data-id': t.id, class: liClass },
+        h('input', { 
+          class: 'edit', 
+          value: t.title,
+          'data-id': t.id
+        })
+      );
+    }
+
+    return h('li', { 'data-id': t.id, class: liClass },
       h('div', { class: 'view' },
         h('input', { class: 'toggle', type: 'checkbox', checked: t.completed ? 'checked' : null }),
-        h('label', {}, t.title),
+        h('label', { 'data-id': t.id }, t.title),
         h('button', { class: 'destroy' })
       )
-    )
-  );
+    );
+  });
 
   return h('div', {}, items);
 }
@@ -71,16 +87,67 @@ function clearCompleted() {
   }));
 }
 
-function renderApp() {
-  const container = document.getElementById('todo-list');
-  const vnode = view(store.getState());
-  render(vnode, container, store.getState());
+function startEditing(id) {
+  store.update(s => ({ ...s, editingId: id }));
+}
 
-  // Footer counts
-  const remaining = store.getState().todos.filter(t => !t.completed).length;
+function finishEditing(id, newTitle) {
+  const trimmed = newTitle.trim();
+  if (!trimmed) {
+    destroyTodo(id);
+  } else {
+    store.update(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id ? { ...t, title: trimmed } : t),
+      editingId: null
+    }));
+  }
+}
+
+function cancelEditing() {
+  store.update(s => ({ ...s, editingId: null }));
+}
+
+function renderApp() {
+  const state = store.getState();
+  const container = document.getElementById('todo-list');
+  const vnode = view(state);
+  render(vnode, container, state);
+
+  // Footer visibility and counts
+  const remaining = state.todos.filter(t => !t.completed).length;
+  const completed = state.todos.filter(t => t.completed).length;
+  const hasTodos = state.todos.length > 0;
+  
+  // Show/hide footer
+  const footer = document.querySelector('.footer');
+  if (footer) {
+    footer.style.display = hasTodos ? 'block' : 'none';
+  }
+
+  // Show/hide main section
+  const main = document.querySelector('.main');
+  if (main) {
+    main.style.display = hasTodos ? 'block' : 'none';
+  }
+
+  // Update count
   const countEl = document.getElementById('todo-count');
   if (countEl) {
     countEl.textContent = `${remaining} item${remaining === 1 ? '' : 's'} left`;
+  }
+
+  // Update toggle-all checkbox
+  const toggleAll = document.getElementById('toggle-all');
+  if (toggleAll) {
+    toggleAll.checked = hasTodos && remaining === 0;
+    toggleAll.indeterminate = hasTodos && remaining > 0 && completed > 0;
+  }
+
+  // Show/hide clear completed button
+  const clearBtn = document.getElementById('clear-completed');
+  if (clearBtn) {
+    clearBtn.style.display = completed > 0 ? 'block' : 'none';
   }
 
   // Filter selected
@@ -88,9 +155,18 @@ function renderApp() {
   links.forEach(a => {
     const href = a.getAttribute('href') || '#/all';
     const f = href.replace(/^#\//, '');
-    if (f === store.getState().filter) a.classList.add('selected');
+    if (f === state.filter) a.classList.add('selected');
     else a.classList.remove('selected');
   });
+
+  // Focus edit input if editing
+  if (state.editingId) {
+    const editInput = document.querySelector('.edit');
+    if (editInput) {
+      editInput.focus();
+      editInput.select();
+    }
+  }
 }
 
 function wireEvents() {
@@ -110,6 +186,22 @@ function wireEvents() {
       const li = el.closest('li');
       if (!li) return;
       destroyTodo(li.getAttribute('data-id'));
+    },
+    'dblclick label': (ev, el) => {
+      const id = el.getAttribute('data-id');
+      if (id) startEditing(id);
+    },
+    'keydown .edit': (ev, el) => {
+      const id = el.getAttribute('data-id');
+      if (ev.key === 'Enter') {
+        finishEditing(id, el.value);
+      } else if (ev.key === 'Escape') {
+        cancelEditing();
+      }
+    },
+    'blur .edit': (ev, el) => {
+      const id = el.getAttribute('data-id');
+      finishEditing(id, el.value);
     },
     'click #clear-completed': () => clearCompleted(),
     'change #toggle-all': (ev, el) => toggleAll(el.checked)
