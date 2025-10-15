@@ -4,7 +4,15 @@ import { bindEvents } from '../../framework/events.js';
 import { createRouter } from '../../framework/router.js';
 
 // State shape: { todos: [{id, title, completed}], filter: 'all', editingId: null }
-const store = createStore({ todos: [], filter: 'all', editingId: null });
+const store = createStore({ 
+  todos: [
+    { id: '1', title: 'Going to the Gym.', completed: false },
+    { id: '2', title: 'Call Mama', completed: true },
+    { id: '3', title: 'Do homework', completed: false }
+  ], 
+  filter: 'all', 
+  editingId: null 
+});
 const router = createRouter();
 
 function filteredTodos(state) {
@@ -204,7 +212,14 @@ function wireEvents() {
       finishEditing(id, el.value);
     },
     'click #clear-completed': () => clearCompleted(),
-    'change #toggle-all': (ev, el) => toggleAll(el.checked)
+    'change #toggle-all': (ev, el) => toggleAll(el.checked),
+    'click label[for="toggle-all"]': (ev, el) => {
+      const toggleAllEl = document.getElementById('toggle-all');
+      if (toggleAllEl) {
+        toggleAllEl.checked = !toggleAllEl.checked;
+        toggleAll(toggleAllEl.checked);
+      }
+    }
   });
   return dispose;
 }
